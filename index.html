@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Product Management App</title>
+
+  <!-- Minimal nice styling -->
+  <style>
+    :root{
+      --bg:#f4f7fb;
+      --card:#ffffff;
+      --accent:#4f46e5;
+      --muted:#6b7280;
+      --danger:#ef4444;
+      --ok:#10b981;
+      --shadow: 0 6px 18px rgba(15,23,42,.08);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    body{
+      margin:0;
+      background: linear-gradient(180deg, #eef2ff 0%, var(--bg) 100%);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:32px;
+    }
+    .container{
+      width:100%;
+      max-width:900px;
+      background:var(--card);
+      border-radius:12px;
+      box-shadow:var(--shadow);
+      padding:28px;
+    }
+    h1{ margin:0 0 14px 0; font-size:22px; color:#0f172a; }
+    p.lead{ margin:0 0 22px 0; color:var(--muted); }
+
+    form {
+      display:flex;
+      gap:12px;
+      margin-bottom:18px;
+      align-items:center;
+    }
+    input[type="text"]{
+      flex:1;
+      padding:10px 12px;
+      border:1px solid #e6e9ef;
+      border-radius:8px;
+      font-size:15px;
+    }
+    button{
+      padding:10px 14px;
+      border-radius:8px;
+      border:0;
+      font-weight:600;
+      cursor:pointer;
+      font-size:14px;
+      box-shadow: 0 4px 10px rgba(2,6,23,0.04);
+    }
+    .btn-add { background: linear-gradient(90deg,var(--accent), #6366f1); color:white; }
+    .btn-edit { background: #f3f4f6; color:#111827; }
+    .btn-delete { background: #fff5f5; color:var(--danger); border:1px solid #fee2e2; }
+
+    .message {
+      margin: 8px 0 16px 0;
+      padding:8px 12px;
+      border-radius:8px;
+      font-size:14px;
+      display:none;
+    }
+    .message.ok { background:#ecfdf5; color: #065f46; border:1px solid #bbf7d0; display:block; }
+    .message.err { background:#fff1f2; color: #7f1d1d; border:1px solid #fecaca; display:block; }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      background:transparent;
+    }
+    thead th{
+      text-align:left;
+      padding:12px 10px;
+      font-size:13px;
+      color:var(--muted);
+      border-bottom:1px solid #eef2ff;
+    }
+    tbody td{
+      padding:12px 10px;
+      border-bottom:1px solid #f3f4f6;
+      vertical-align:middle;
+      font-size:15px;
+      color:#0f172a;
+    }
+    .actions { display:flex; gap:8px; }
+    .small-btn { padding:6px 8px; font-size:13px; border-radius:8px; }
+    .empty {
+      text-align:center;
+      padding:18px;
+      color:var(--muted);
+    }
+
+    footer{ margin-top:14px; color:var(--muted); font-size:13px; }
+    @media (max-width:640px){
+      form { flex-direction:column; align-items:stretch; }
+      .actions { flex-wrap:wrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" role="main">
+    <h1>Product Management App</h1>
+    <p class="lead">Add, edit, and delete products stored in your Supabase database.</p>
+
+    <!-- Form -->
+    <form id="productForm" autocomplete="off">
+      <input id="productName" type="text" placeholder="Enter product name" required />
+      <button id="addBtn" class="btn-add" type="submit">Add Product</button>
+    </form>
+
+    <!-- Messages -->
+    <div id="msg" class="message" role="status" aria-live="polite"></div>
+
+    <!-- Products table -->
+    <div class="table-wrap">
+      <table aria-label="Products table">
+        <thead>
+          <tr>
+            <th style="width:65%;">Product Name</th>
+            <th style="width:35%;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="productsTbody">
+          <!-- rows inserted here -->
+        </tbody>
+      </table>
+    </div>
+
+    <footer>Connected via Supabase API. Make sure to replace the placeholders with your Supabase URL &amp; anon key in the script below.</footer>
+  </div>
+
+  <!-- Supabase JS (browser CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/supabase.min.js"></script>
+
+  <script>
+    // === Supabase connection setup ===
+    // Replace these placeholders with your actual Supabase URL and anon/public key
+    const { createClient } = supabase;
+    const supabaseUrl = 'https://sccfkynjkciezvmxmrjt.supabase.co';  // Replace with your Supabase URL
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjY2ZreW5qa2NpZXp2bXhtcmp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxMDYyODIsImV4cCI6MjA4MDY4MjI4Mn0.pmdivA428FpS0kOnejI8y-2GKwwEcxEudigsNHnRTTY';  // Replace with your Supabase Key
+    const supabaseClient = createClient(supabaseUrl, supabaseKey);
+    // === DOM references ===
+    const productForm = document.getElementById('productForm');
+    const productNameInput = document.getElementById('productName');
+    const productsTbody = document.getElementById('productsTbody');
+    const msgEl = document.getElementById('msg');
+
+    // Helper: show messages
+    function showMessage(text, type = 'ok') {
+      msgEl.textContent = text;
+      msgEl.className = 'message ' + (type === 'ok' ? 'ok' : 'err');
+      // hide after 4 seconds
+      setTimeout(() => {
+        msgEl.className = 'message';
+      }, 4000);
+    }
+
+    // Fetch and render products from Supabase
+    async function loadProducts() {
+      try {
+        productsTbody.innerHTML = '<tr><td class="empty" colspan="2">Loading...</td></tr>';
+        const { data, error } = await supabaseClient
+          .from('products')        // ensure your table name is 'products'
+          .select('*')
+          .order('id', { ascending: true });
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+          productsTbody.innerHTML = '<tr><td class="empty" colspan="2">No products yet. Add one above.</td></tr>';
+          return;
+        }
+
+        // render rows
+        productsTbody.innerHTML = '';
+        for (const product of data) {
+          const tr = document.createElement('tr');
+
+          // name cell
+          const tdName = document.createElement('td');
+          tdName.textContent = product.name;
+          tdName.setAttribute('data-id', product.id);
+          tr.appendChild(tdName);
+
+          // actions cell
+          const tdActions = document.createElement('td');
+          const actionsDiv = document.createElement('div');
+          actionsDiv.className = 'actions';
+
+          // Edit button
+          const editBtn = document.createElement('button');
+          editBtn.className = 'small-btn btn-edit';
+          editBtn.textContent = 'Edit';
+          editBtn.addEventListener('click', () => onEdit(product));
+
+          // Delete button
+          const delBtn = document.createElement('button');
+          delBtn.className = 'small-btn btn-delete';
+          delBtn.textContent = 'Delete';
+          delBtn.addEventListener('click', () => onDelete(product.id, product.name));
+
+          actionsDiv.appendChild(editBtn);
+          actionsDiv.appendChild(delBtn);
+          tdActions.appendChild(actionsDiv);
+          tr.appendChild(tdActions);
+
+          productsTbody.appendChild(tr);
+        }
+      } catch (err) {
+        console.error('Load products error:', err);
+        productsTbody.innerHTML = '<tr><td class="empty" colspan="2">Failed to load products.</td></tr>';
+        showMessage('Error loading products: ' + (err.message || err), 'err');
+      }
+    }
+
+    // Add product
+    async function addProduct(name) {
+      try {
+        if (!name || !name.trim()) {
+          showMessage('Product name cannot be empty.', 'err');
+          return;
+        }
+        const { data, error } = await supabaseClient
+          .from('products')
+          .insert([{ name: name.trim() }])
+          .select(); // return the inserted row(s)
+
+        if (error) throw error;
+
+        showMessage('Product added.');
+        productNameInput.value = '';
+        await loadProducts();
+      } catch (err) {
+        console.error('Insert error:', err);
+        showMessage('Error adding product: ' + (err.message || err), 'err');
+      }
+    }
+
+    // Edit product (prompt-based)
+    async function onEdit(product) {
+      // prompt for new name
+      const newName = prompt('Edit product name:', product.name);
+      if (newName === null) return; // user cancelled
+      if (!newName.trim()) {
+        showMessage('Product name cannot be empty.', 'err');
+        return;
+      }
+      try {
+        const { data, error } = await supabaseClient
+          .from('products')
+          .update({ name: newName.trim() })
+          .eq('id', product.id)
+          .select();
+
+        if (error) throw error;
+
+        showMessage('Product updated.');
+        await loadProducts();
+      } catch (err) {
+        console.error('Update error:', err);
+        showMessage('Error updating product: ' + (err.message || err), 'err');
+      }
+    }
+
+    // Delete product
+    async function onDelete(id, name) {
+      const ok = confirm(`Delete product "${name}"? This cannot be undone.`);
+      if (!ok) return;
+      try {
+        const { data, error } = await supabaseClient
+          .from('products')
+          .delete()
+          .eq('id', id)
+          .select();
+
+        if (error) throw error;
+
+        showMessage('Product deleted.');
+        await loadProducts();
+      } catch (err) {
+        console.error('Delete error:', err);
+        showMessage('Error deleting product: ' + (err.message || err), 'err');
+      }
+    }
+
+    // Form submit handler
+    productForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = productNameInput.value;
+      await addProduct(name);
+    });
+
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', () => {
+      loadProducts();
+    });
+
+    // --- Notes for setup ---
+    // 1) Make sure you have a table named 'products' in your Supabase project with:
+    //      id   -> integer, primary key, auto-increment
+    //      name -> text (not null)
+    // 2) Replace supabaseUrl and supabaseKey above with your project's values.
+    // 3) If you use Row Level Security (RLS) on the table, ensure a policy allows public anon key to read/insert/update/delete,
+    //    or use a service role key (NOT recommended in browser) while developing. Best practice: enable RLS and create policies.
+  </script>
+</body>
+</html>
